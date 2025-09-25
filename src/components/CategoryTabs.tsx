@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { DEFAULT_CATEGORIES } from "@/lib/sources";
+import type { Route } from "next";
 
 export function CategoryTabs() {
   const pathname = usePathname();
@@ -14,7 +15,7 @@ export function CategoryTabs() {
   return (
     <div className="w-full overflow-x-auto flex gap-2 py-2">
       {DEFAULT_CATEGORIES.map((c) => {
-        const href = c === "top" ? "/" : { pathname: "/category/[key]", query: { key: c } };
+        const href = (c === "top" ? "/" : `/category/${c}`) as Route;
         return (
           <Link
             key={c}

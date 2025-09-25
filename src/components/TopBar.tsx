@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { Newspaper, Bookmark, Settings, RefreshCcw } from "lucide-react";
+import { CategoryTabs } from "./CategoryTabs";
 
 export function TopBar() {
   const pathname = usePathname();
@@ -16,13 +17,13 @@ export function TopBar() {
     }
   };
   return (
-    <header className="sticky top-0 z-40 w-full backdrop-blur supports-[backdrop-filter]:bg-background/70 border-b border-white/10">
-      <div className="mx-auto max-w-5xl px-4 py-3 flex items-center justify-between">
+    <header className="sticky top-0 z-40 w-full backdrop-blur border-b border-white/10">
+      <div className="mx-auto max-w-7xl px-4 md:px-6 lg:px-8 py-3 flex items-center justify-between">
         <Link href="/" className="flex items-center gap-2">
           <Newspaper className="w-6 h-6" />
           <span className="text-lg font-semibold">తెలుగు వార్తలు</span>
         </Link>
-        <nav className="flex items-center gap-3 text-sm">
+        <nav className="flex items-center gap-4 text-sm">
           <button onClick={refresh} className="inline-flex items-center gap-1 hover:opacity-80">
             <RefreshCcw className="w-4 h-4" />
             <span>రిఫ్రెష్</span>
@@ -36,6 +37,9 @@ export function TopBar() {
             <span>సెట్టింగ్స్</span>
           </Link>
         </nav>
+      </div>
+      <div className="mx-auto max-w-7xl px-4 md:px-6 lg:px-8 pb-3">
+        <CategoryTabs />
       </div>
     </header>
   );
