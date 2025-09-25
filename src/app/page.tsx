@@ -1,6 +1,5 @@
 import { fetchAggregatedArticles, invalidateCache } from "@/lib/aggregator";
 import { Category } from "@/lib/types";
-import { CategoryTabs } from "@/components/CategoryTabs";
 import { ArticleList } from "@/components/ArticleList";
 import { SourceFilter } from "@/components/SourceFilter";
 import { Suspense } from "react";
@@ -24,7 +23,6 @@ export default async function Home(props: unknown) {
   });
   return (
     <div className="space-y-4">
-      <CategoryTabs />
       <Suspense>
         <SourceFilter
           sources={SOURCES.map((s) => ({ id: s.id, name: s.name }))}
