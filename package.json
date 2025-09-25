@@ -21,6 +21,7 @@
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "rss-parser": "^3.13.0",
+    "cheerio": "^1.0.0-rc.12",
     "zod": "^4.1.11"
   },
   "devDependencies": {

@@ -3,6 +3,7 @@ import { formatISO } from "date-fns";
 import { stableHash } from "./hash";
 import { ArticleItem, Category } from "./types";
 import { SOURCES } from "./sources";
+import * as cheerio from "cheerio";
 
 type Enclosure = { url?: string } | undefined;
 type AnyItem = Parser.Item & {
@@ -34,6 +35,71 @@ async function parseWithTimeout(url: string, timeoutMs: number): Promise<FeedOut
     parser.parseURL(url),
     new Promise<never>((_, reject) => setTimeout(() => reject(new Error("timeout")), timeoutMs)),
   ])) as unknown as FeedOutput;
+}
+
+// HTML adapter for sources without RSS: fetch homepage/listing and extract latest links.
+async function fetchFromHtmlSource(sourceId: string, sourceName: string, homepage: string): Promise<ArticleItem[]> {
+  const res = await fetch(homepage, {
+    headers: {
+      "User-Agent": "Mozilla/5.0 (compatible; TeluguNewsBot/1.0)",
+      Accept: "text/html,application/xhtml+xml",
+    },
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`http ${res.status}`);
+  const html = await res.text();
+  const $ = cheerio.load(html);
+
+  // Attempt to get a page-level published time (fallback)
+  const pageMetaTime = (
+    $('meta[property="article:published_time"]').attr('content') ||
+    $('meta[name="pubdate"]').attr('content') ||
+    $('meta[name="date"]').attr('content') ||
+    $('time[datetime]').first().attr('datetime') ||
+    ''
+  ).trim();
+
+  const candidates: Array<{ title: string; url: string; image?: string; publishedAt?: string }> = [];
+  $("article a, .article a, .post a, .story a, .list a, .news-list a, .news a, .headline a").each((_, el) => {
+    const a = $(el);
+    const href = a.attr("href") || "";
+    const text = a.text().trim();
+    if (!href || !text) return;
+    if (text.length < 12) return;
+    const url = new URL(href, homepage).toString();
+    const img = a.closest("article").find("img").attr("src") || a.find("img").attr("src");
+    const image = img ? new URL(img, homepage).toString() : undefined;
+    // Try to find a nearby time element
+    let publishedAt = a.closest('article').find('time[datetime]').attr('datetime')
+      || a.closest('.post,.story,.list,.news,.headline').find('time[datetime]').attr('datetime')
+      || undefined;
+    if (!publishedAt && pageMetaTime) publishedAt = pageMetaTime;
+    candidates.push({ title: text, url, image, publishedAt });
+  });
+
+  const seen = new Set<string>();
+  const picked = candidates.filter((c) => {
+    const k = c.title.toLowerCase();
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  }).slice(0, 30);
+
+  const nowISO = formatISO(new Date());
+  const items: ArticleItem[] = picked.map((c) => ({
+    id: stableHash(`${sourceId}:${c.title}`),
+    sourceId,
+    sourceName,
+    title: c.title,
+    summary: undefined,
+    url: c.url,
+    image: c.image,
+    categories: ["top"],
+    publishedAt: c.publishedAt && !Number.isNaN(Date.parse(c.publishedAt))
+      ? new Date(c.publishedAt).toISOString()
+      : nowISO,
+  }));
+  return items;
 }
 
 async function fetchFeedWithRetry(url: string, timeoutMs: number): Promise<FeedOutput> {
@@ -76,38 +142,52 @@ export async function fetchAggregatedArticles(opts?: {
   }
 
   const items: ArticleItem[] = [];
-  // Build tasks for all feeds and fetch them in parallel with per-feed timeout
-  const tasks = SOURCES.flatMap((source) =>
-    source.feeds.map(async (feed) => {
-      try {
-        const url = normalizeFeedUrl(feed.url);
-        const res = await fetchFeedWithRetry(url, FEED_TIMEOUT_MS);
-        for (const entry of (res.items as AnyItem[]) ?? []) {
-          const title = (entry.title || "").trim();
-          const link = (entry.link || "").trim();
-          if (!title || !link) continue;
-          const id = stableHash(`${source.id}:${title}`);
-          const pub = (entry.isoDate || entry.pubDate) as string | undefined;
-          const summary = (entry.contentSnippet || entry.content || entry.summary || "").toString();
-          const image = extractImage(entry);
-
-          items.push({
-            id,
-            sourceId: source.id,
-            sourceName: source.name,
-            title,
-            summary,
-            url: link,
-            image,
-            publishedAt: pub ? new Date(pub).toISOString() : undefined,
-            categories: feed.categories,
-          });
-        }
-      } catch (e) {
-        console.warn("[Aggregator] Feed error", { source: source.id, url: feed.url, error: (e as Error)?.message });
+  // Build tasks for all sources. If RSS feeds exist, use them; otherwise use custom HTML fetchers.
+  const tasks: Array<Promise<void>> = [];
+  for (const source of SOURCES) {
+    if (source.feeds && source.feeds.length) {
+      for (const feed of source.feeds) {
+        tasks.push((async () => {
+          try {
+            const url = normalizeFeedUrl(feed.url);
+            const res = await fetchFeedWithRetry(url, FEED_TIMEOUT_MS);
+            for (const entry of (res.items as AnyItem[]) ?? []) {
+              const title = (entry.title || "").trim();
+              const link = (entry.link || "").trim();
+              if (!title || !link) continue;
+              const id = stableHash(`${source.id}:${title}`);
+              const pub = (entry.isoDate || entry.pubDate) as string | undefined;
+              const summary = (entry.contentSnippet || entry.content || entry.summary || "").toString();
+              const image = extractImage(entry);
+              items.push({
+                id,
+                sourceId: source.id,
+                sourceName: source.name,
+                title,
+                summary,
+                url: link,
+                image,
+                publishedAt: pub ? new Date(pub).toISOString() : undefined,
+                categories: feed.categories,
+              });
+            }
+          } catch (e) {
+            console.warn("[Aggregator] Feed error", { source: source.id, url: feed.url, error: (e as Error)?.message });
+          }
+        })());
       }
-    })
-  );
+    } else {
+      // Custom HTML fetcher path
+      tasks.push((async () => {
+        try {
+          const htmlItems = await fetchFromHtmlSource(source.id, source.name, source.homepage);
+          for (const it of htmlItems) items.push(it);
+        } catch (e) {
+          console.warn("[Aggregator] HTML fetch error", { source: source.id, error: (e as Error)?.message });
+        }
+      })());
+    }
+  }
 
   await Promise.allSettled(tasks);
 
