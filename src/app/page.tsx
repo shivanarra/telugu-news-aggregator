@@ -3,14 +3,15 @@ import { Category } from "@/lib/types";
 import { CategoryTabs } from "@/components/CategoryTabs";
 import { ArticleList } from "@/components/ArticleList";
 import { SourceFilter } from "@/components/SourceFilter";
+import { Suspense } from "react";
 import { SOURCES } from "@/lib/sources";
 import { LiveUpdater } from "@/components/LiveUpdater";
 import { formatDateTimeISOToReadable } from "@/lib/date";
 
 export const dynamic = "force-dynamic";
 
-export default async function Home(props: Promise<{ searchParams?: { [key: string]: string | string[] | undefined } }>) {
-  const { searchParams } = await props;
+export default async function Home(props: unknown) {
+  const { searchParams } = (props || {}) as { searchParams?: { [key: string]: string | string[] | undefined } };
   if (searchParams && searchParams["force"]) {
     invalidateCache();
   }
@@ -24,10 +25,12 @@ export default async function Home(props: Promise<{ searchParams?: { [key: strin
   return (
     <div className="space-y-4">
       <CategoryTabs />
-      <SourceFilter
-        sources={SOURCES.map((s) => ({ id: s.id, name: s.name }))}
-        initialSelected={selected}
-      />
+      <Suspense>
+        <SourceFilter
+          sources={SOURCES.map((s) => ({ id: s.id, name: s.name }))}
+          initialSelected={selected}
+        />
+      </Suspense>
       <LiveUpdater category="top" sources={selected} fetchedAtISO={fetchedAt} />
       <div className="text-xs text-white/60">అప్‌డేట్: {formatDateTimeISOToReadable(fetchedAt)}</div>
       <ArticleList articles={articles} />

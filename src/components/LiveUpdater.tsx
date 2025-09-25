@@ -14,7 +14,6 @@ export function LiveUpdater({
   intervalMs?: number;
 }) {
   const [hasNew, setHasNew] = useState(false);
-  const [checking, setChecking] = useState(false);
 
   const query = useMemo(() => {
     const params = new URLSearchParams();
@@ -25,16 +24,11 @@ export function LiveUpdater({
 
   useEffect(() => {
     const timer = setInterval(async () => {
-      try {
-        setChecking(true);
-        const res = await fetch(`/api/articles?${query}`, { cache: "no-store" });
-        if (!res.ok) return;
-        const data = (await res.json()) as { fetchedAt: string };
-        if (new Date(data.fetchedAt).getTime() > new Date(fetchedAtISO).getTime()) {
-          setHasNew(true);
-        }
-      } finally {
-        setChecking(false);
+      const res = await fetch(`/api/articles?${query}`, { cache: "no-store" });
+      if (!res.ok) return;
+      const data = (await res.json()) as { fetchedAt: string };
+      if (new Date(data.fetchedAt).getTime() > new Date(fetchedAtISO).getTime()) {
+        setHasNew(true);
       }
     }, intervalMs);
     return () => clearInterval(timer);

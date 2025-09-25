@@ -1,7 +1,6 @@
 "use client";
 
 import Image from "next/image";
-import Link from "next/link";
 import { ArticleItem } from "@/lib/types";
 import { Volume2, Square } from "lucide-react";
 import { useRef, useState } from "react";

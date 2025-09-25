@@ -14,7 +14,7 @@ export function CategoryTabs() {
   return (
     <div className="w-full overflow-x-auto flex gap-2 py-2">
       {DEFAULT_CATEGORIES.map((c) => {
-        const href = c === "top" ? "/" : `/category/${c}`;
+        const href = c === "top" ? "/" : { pathname: "/category/[key]", query: { key: c } };
         return (
           <Link
             key={c}

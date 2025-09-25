@@ -7,7 +7,7 @@ import { SOURCES } from "./sources";
 type Enclosure = { url?: string } | undefined;
 type AnyItem = Parser.Item & {
   enclosure?: Enclosure;
-  [key: string]: any;
+  [key: string]: unknown;
 };
 
 const parser: Parser<unknown, AnyItem> = new Parser<unknown, AnyItem>({
@@ -27,23 +27,23 @@ const CACHE_TTL_MS = 60 * 1000; // 60 seconds
 // Per-feed timeout to keep SSR fast
 const FEED_TIMEOUT_MS = 3000; // 3 seconds per feed
 
-async function parseWithTimeout(url: string, timeoutMs: number): Promise<Parser.Output<unknown, AnyItem>> {
-  return await Promise.race([
+type FeedOutput = { items?: AnyItem[] };
+
+async function parseWithTimeout(url: string, timeoutMs: number): Promise<FeedOutput> {
+  return (await Promise.race([
     parser.parseURL(url),
     new Promise<never>((_, reject) => setTimeout(() => reject(new Error("timeout")), timeoutMs)),
-  ]) as Parser.Output<unknown, AnyItem>;
+  ])) as unknown as FeedOutput;
 }
 
 function normalizeFeedUrl(u: string): string {
   try {
     const url = new URL(u);
-    // Re-set all params to force proper encoding in the final URL string
+    // Rebuild query string to ensure proper encoding
+    const rebuilt = new URL(url.origin + url.pathname);
     const entries = Array.from(url.searchParams.entries());
-    url.searchParams.clear();
-    for (const [k, v] of entries) {
-      url.searchParams.set(k, v);
-    }
-    return url.toString();
+    for (const [k, v] of entries) rebuilt.searchParams.set(k, v);
+    return rebuilt.toString();
   } catch {
     return u;
   }
@@ -88,7 +88,6 @@ export async function fetchAggregatedArticles(opts?: {
           });
         }
       } catch (e) {
-        // eslint-disable-next-line no-console
         console.warn("[Aggregator] Feed error", { source: source.id, url: feed.url, error: (e as Error)?.message });
       }
     })
@@ -192,27 +191,36 @@ function sampleArticles(nowISO: string): ArticleItem[] {
 
 function extractImage(entry: AnyItem): string | undefined {
   // 1) enclosure
-  const enclosureUrl = (entry.enclosure && (entry.enclosure as any).url) as string | undefined;
+  const enclosureUrl =
+    typeof entry.enclosure === "object" && entry.enclosure && "url" in entry.enclosure
+      ? (entry.enclosure.url as string | undefined)
+      : undefined;
   if (enclosureUrl) return enclosureUrl;
   // 2) media:content or media:thumbnail
   const mediaContent = entry["media:content"]; // may be object or array
   if (mediaContent) {
     if (Array.isArray(mediaContent)) {
       for (const m of mediaContent) {
-        if (m?.url) return m.url as string;
+        if (m && typeof m === "object" && "url" in m && (m as { url?: unknown }).url) {
+          return (m as { url?: string }).url;
+        }
       }
-    } else if (typeof mediaContent === "object" && mediaContent.url) {
-      return mediaContent.url as string;
+    } else if (typeof mediaContent === "object" && mediaContent && "url" in mediaContent) {
+      const u = (mediaContent as { url?: unknown }).url;
+      if (typeof u === "string") return u;
     }
   }
   const mediaThumb = entry["media:thumbnail"];
   if (mediaThumb) {
     if (Array.isArray(mediaThumb)) {
       for (const m of mediaThumb) {
-        if (m?.url) return m.url as string;
+        if (m && typeof m === "object" && "url" in m && (m as { url?: unknown }).url) {
+          return (m as { url?: string }).url;
+        }
       }
-    } else if (typeof mediaThumb === "object" && mediaThumb.url) {
-      return mediaThumb.url as string;
+    } else if (typeof mediaThumb === "object" && mediaThumb && "url" in mediaThumb) {
+      const u = (mediaThumb as { url?: unknown }).url;
+      if (typeof u === "string") return u;
     }
   }
   // 3) Try parsing the first img src from content:encoded

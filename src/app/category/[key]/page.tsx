@@ -4,17 +4,18 @@ import { fetchAggregatedArticles, invalidateCache } from "@/lib/aggregator";
 import { Category } from "@/lib/types";
 import { notFound } from "next/navigation";
 import { SourceFilter } from "@/components/SourceFilter";
+import { Suspense } from "react";
 import { SOURCES } from "@/lib/sources";
 import { LiveUpdater } from "@/components/LiveUpdater";
 import { formatDateTimeISOToReadable } from "@/lib/date";
 
 export const dynamic = "force-dynamic";
 
-export default async function CategoryPage(props: Promise<{
-  params: { key: string };
-  searchParams?: { [key: string]: string | string[] | undefined };
-}>) {
-  const { params, searchParams } = await props;
+export default async function Page(props: unknown) {
+  const { params, searchParams } = (props || {}) as {
+    params: { key: string };
+    searchParams?: { [key: string]: string | string[] | undefined };
+  };
   const { key } = params;
   const allowed: Category[] = [
     "top",
@@ -43,10 +44,12 @@ export default async function CategoryPage(props: Promise<{
   return (
     <div className="space-y-4">
       <CategoryTabs />
-      <SourceFilter
-        sources={SOURCES.map((s) => ({ id: s.id, name: s.name }))}
-        initialSelected={selected}
-      />
+      <Suspense>
+        <SourceFilter
+          sources={SOURCES.map((s) => ({ id: s.id, name: s.name }))}
+          initialSelected={selected}
+        />
+      </Suspense>
       <LiveUpdater category={key} sources={selected} fetchedAtISO={fetchedAt} />
       <div className="text-xs text-white/60">అప్‌డేట్: {formatDateTimeISOToReadable(fetchedAt)}</div>
       <ArticleList articles={articles} />

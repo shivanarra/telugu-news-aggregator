@@ -31,6 +31,29 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 
 ## Deploy on Vercel
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Option A: GitHub → Vercel (recommended)
+1. Push this repo to GitHub (already done if you see this on GitHub).
+2. Go to https://vercel.com/import and select `shivanarra/telugu-news-aggregator`.
+3. Verify settings when prompted:
+   - Install command: `npm ci`
+   - Build command: `npm run build`
+   - Framework: `Next.js`
+4. Deploy. Vercel will give you a live URL. Add a custom domain if needed.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### Option B: Vercel CLI
+```bash
+npm i -g vercel
+vercel login
+# from project folder
+vercel            # preview deploy
+vercel --prod     # production deploy
+```
+
+### Notes
+- Pages in `src/app/**` are dynamic (`force-dynamic`) and fetch fresh data on each request with a short in-memory cache (60s).
+- `next-pwa` is enabled in production. It caches static assets, not RSS data.
+- If you want persistent/shared caching, add Vercel KV (Upstash Redis) or a database.
+
+### Optional next steps
+- Add a Cron job (Vercel Cron) to hit an API route that pre-warms the feed cache.
+- Wire Vercel KV to store normalized articles and reduce cold-start latency.

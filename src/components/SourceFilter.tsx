@@ -4,6 +4,7 @@ import * as Dialog from "@radix-ui/react-dialog";
 import { useEffect, useMemo, useState } from "react";
 import { Filter } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import type { Route } from "next";
 
 export type SourceOption = { id: string; name: string };
 
@@ -45,7 +46,8 @@ export function SourceFilter({
       params.set("sources", selected.join(","));
     }
     params.delete("force");
-    router.push(`${pathname}?${params.toString()}` as any);
+    const next = `${pathname}?${params.toString()}` as Route;
+    router.push(next);
     setOpen(false);
   };
 
