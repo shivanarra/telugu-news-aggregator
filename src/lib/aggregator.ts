@@ -23,9 +23,9 @@ const parser: Parser<unknown, AnyItem> = new Parser<unknown, AnyItem>({
 // Basic in-memory cache for demo purposes
 let cache: { articles: ArticleItem[]; fetchedAt: string } | null = null;
 let lastFetch = 0;
-const CACHE_TTL_MS = 60 * 1000; // 60 seconds
-// Per-feed timeout to keep SSR fast
-const FEED_TIMEOUT_MS = 3000; // 3 seconds per feed
+const CACHE_TTL_MS = 30 * 1000; // 30 seconds
+// Per-feed timeout to keep SSR fast but reduce timeouts in production
+const FEED_TIMEOUT_MS = 8000; // 8 seconds per feed
 
 type FeedOutput = { items?: AnyItem[] };
 
@@ -34,6 +34,23 @@ async function parseWithTimeout(url: string, timeoutMs: number): Promise<FeedOut
     parser.parseURL(url),
     new Promise<never>((_, reject) => setTimeout(() => reject(new Error("timeout")), timeoutMs)),
   ])) as unknown as FeedOutput;
+}
+
+async function fetchFeedWithRetry(url: string, timeoutMs: number): Promise<FeedOutput> {
+  try {
+    return await parseWithTimeout(url, timeoutMs);
+  } catch (e) {
+    const msg = (e as Error)?.message || "";
+    // retry once on timeout or transient errors
+    if (msg.includes("timeout") || msg.includes("ETIMEDOUT") || msg.includes("ENOTFOUND")) {
+      try {
+        return await parseWithTimeout(url, Math.min(timeoutMs * 2, 15000));
+      } catch (e2) {
+        throw e2;
+      }
+    }
+    throw e;
+  }
 }
 
 function normalizeFeedUrl(u: string): string {
@@ -59,19 +76,18 @@ export async function fetchAggregatedArticles(opts?: {
   }
 
   const items: ArticleItem[] = [];
-
   // Build tasks for all feeds and fetch them in parallel with per-feed timeout
   const tasks = SOURCES.flatMap((source) =>
     source.feeds.map(async (feed) => {
       try {
         const url = normalizeFeedUrl(feed.url);
-        const res = await parseWithTimeout(url, FEED_TIMEOUT_MS);
+        const res = await fetchFeedWithRetry(url, FEED_TIMEOUT_MS);
         for (const entry of (res.items as AnyItem[]) ?? []) {
           const title = (entry.title || "").trim();
           const link = (entry.link || "").trim();
           if (!title || !link) continue;
           const id = stableHash(`${source.id}:${title}`);
-          const pub = entry.isoDate || entry.pubDate || undefined;
+          const pub = (entry.isoDate || entry.pubDate) as string | undefined;
           const summary = (entry.contentSnippet || entry.content || entry.summary || "").toString();
           const image = extractImage(entry);
 
