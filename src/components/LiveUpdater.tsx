@@ -6,7 +6,7 @@ export function LiveUpdater({
   category,
   sources,
   fetchedAtISO,
-  intervalMs = 60000,
+  intervalMs = 30000,
 }: {
   category?: string;
   sources?: string[];
